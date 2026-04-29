@@ -1,0 +1,464 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SPIKE AI Chatbot</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Pretendard:wght@400;500;600;700&display=swap');
+        
+        body {
+            font-family: 'Pretendard', sans-serif;
+            background-color: #ffffff;
+            color: #1f2937;
+            overflow: hidden;
+        }
+
+        .spike-gradient-text {
+            background: linear-gradient(135deg, #9333ea, #ec4899, #a855f7, #9333ea);
+            background-size: 300% 300%;
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            animation: gradient-flow 5s ease infinite;
+        }
+
+        @keyframes gradient-flow {
+            0% { background-position: 0% 50%; }
+            50% { background-position: 100% 50%; }
+            100% { background-position: 0% 50%; }
+        }
+
+        .typing-container {
+            display: inline-block;
+            overflow: hidden;
+            border-right: .15em solid #a855f7;
+            white-space: nowrap;
+            margin: 0 auto;
+            letter-spacing: -0.02em;
+            animation: 
+                typing 2s steps(20, end),
+                blink-caret .75s step-end infinite;
+        }
+
+        @keyframes typing {
+            from { width: 0 }
+            to { width: 100% }
+        }
+
+        @keyframes blink-caret {
+            from, to { border-color: transparent }
+            50% { border-color: #a855f7; }
+        }
+
+        .chat-container {
+            height: calc(100vh - 180px);
+            scrollbar-width: none;
+        }
+        .chat-container::-webkit-scrollbar {
+            display: none;
+        }
+
+        .input-area {
+            background-color: #f0f4f9;
+            border-radius: 32px;
+            transition: all 0.2s ease;
+        }
+
+        .input-area:focus-within {
+            background-color: #e3e9f0;
+        }
+
+        .message-bubble {
+            max-width: 85%;
+            line-height: 1.6;
+        }
+
+        .user-message {
+            background-color: #f0f4f9;
+            color: #1f2937;
+            border-radius: 20px;
+        }
+
+        .ai-message {
+            background-color: transparent;
+            color: #1f2937;
+        }
+
+        .welcome-screen {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100%;
+            text-align: center;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        .animate-fade {
+            animation: fadeIn 0.4s ease forwards;
+        }
+
+        .typing-dot {
+            width: 5px;
+            height: 5px;
+            background: #9ca3af;
+            border-radius: 50%;
+            display: inline-block;
+            animation: bounce 1.4s infinite ease-in-out both;
+        }
+        .typing-dot:nth-child(1) { animation-delay: -0.32s; }
+        .typing-dot:nth-child(2) { animation-delay: -0.16s; }
+
+        @keyframes bounce {
+            0%, 80%, 100% { transform: scale(0); }
+            40% { transform: scale(1.0); }
+        }
+
+        .ai-avatar {
+            width: 32px;
+            height: 32px;
+            background: linear-gradient(135deg, #9333ea, #ec4899);
+            border-radius: 8px;
+            color: white;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: bold;
+            font-size: 12px;
+        }
+
+        /* 사이드바 */
+        #sidebar {
+            transition: transform 0.3s ease-in-out;
+            z-index: 50;
+        }
+        .sidebar-overlay {
+            background: rgba(0, 0, 0, 0.4);
+            opacity: 0;
+            transition: opacity 0.3s ease-in-out;
+            pointer-events: none;
+            z-index: 40;
+        }
+        .sidebar-active .sidebar-overlay {
+            opacity: 1;
+            pointer-events: auto;
+        }
+        .sidebar-active #sidebar {
+            transform: translateX(0);
+        }
+
+        /* 모달 스타일 */
+        .modal {
+            display: none;
+            position: fixed;
+            inset: 0;
+            z-index: 100;
+            background: rgba(0, 0, 0, 0.5);
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+        }
+        .modal.active {
+            display: flex;
+        }
+    </style>
+</head>
+<body class="flex flex-col h-screen max-w-lg mx-auto bg-white border-x border-gray-100 shadow-sm relative">
+
+    <div id="sidebar-overlay" class="sidebar-overlay fixed inset-0"></div>
+
+    <!-- 사이드바 패널 -->
+    <aside id="sidebar" class="fixed top-0 left-0 h-full w-72 bg-white shadow-2xl -translate-x-full">
+        <div class="p-6 h-full flex flex-col">
+            <div class="flex items-center justify-between mb-8">
+                <span class="font-bold text-xl spike-gradient-text tracking-tighter">SPIKE</span>
+                <button id="close-sidebar" class="text-gray-400 hover:text-gray-600">
+                    <i class="fas fa-times text-lg"></i>
+                </button>
+            </div>
+            
+            <button id="new-chat-btn" class="flex items-center space-x-3 w-full p-4 bg-gray-50 rounded-xl hover:bg-gray-100 transition-colors mb-6 group">
+                <div class="w-8 h-8 rounded-full bg-white flex items-center justify-center text-purple-600 shadow-sm group-hover:scale-110 transition-transform">
+                    <i class="fas fa-plus text-xs"></i>
+                </div>
+                <span class="font-medium text-gray-700">새 채팅 시작</span>
+            </button>
+
+            <div class="flex-1 overflow-y-auto">
+                <div class="flex items-center justify-between px-2 mb-4">
+                    <p class="text-[11px] font-semibold text-gray-400 uppercase tracking-widest">최근 대화</p>
+                    <button id="clear-history" class="text-[10px] text-gray-300 hover:text-red-400 transition-colors">전체 삭제</button>
+                </div>
+                <div id="sidebar-chat-history" class="space-y-1">
+                    <p class="text-xs text-gray-400 px-2 italic py-4">최근 대화 기록이 없습니다.</p>
+                </div>
+            </div>
+
+            <div class="pt-6 border-t border-gray-100 mt-auto">
+                <!-- 유저 탭 (클릭 시 한도 모달 오픈) -->
+                <button id="user-tab" class="flex items-center space-x-3 px-2 py-3 w-full hover:bg-gray-50 rounded-xl transition-colors text-left">
+                    <div class="w-8 h-8 bg-purple-100 text-purple-600 rounded-full flex items-center justify-center font-bold text-xs">U</div>
+                    <div class="flex-1">
+                        <p class="text-sm font-semibold text-gray-800">사용자님</p>
+                        <p class="text-[10px] text-gray-400">한도 확인하기</p>
+                    </div>
+                    <i class="fas fa-chevron-right text-[10px] text-gray-300"></i>
+                </button>
+            </div>
+        </div>
+    </aside>
+
+    <!-- 한도 확인 모달 -->
+    <div id="limit-modal" class="modal">
+        <div class="bg-white rounded-3xl w-full max-w-xs p-6 shadow-2xl animate-fade">
+            <h3 class="text-lg font-bold text-gray-800 mb-4 text-center">오늘의 질문 한도</h3>
+            <div class="bg-gray-50 rounded-2xl p-6 mb-6 text-center">
+                <div class="text-4xl font-bold text-purple-600 mb-1" id="remaining-count">50</div>
+                <div class="text-xs text-gray-400 uppercase tracking-tighter">Remaining Questions</div>
+            </div>
+            <div class="space-y-3 mb-6">
+                <div class="flex justify-between text-sm">
+                    <span class="text-gray-500">전체 한도</span>
+                    <span class="font-semibold">50회 / 일</span>
+                </div>
+                <div class="w-full bg-gray-100 h-2 rounded-full overflow-hidden">
+                    <div id="limit-progress" class="bg-purple-500 h-full transition-all duration-500" style="width: 100%;"></div>
+                </div>
+            </div>
+            <button id="close-modal" class="w-full py-4 bg-gray-900 text-white rounded-2xl font-bold text-sm hover:bg-black transition-colors">확인</button>
+        </div>
+    </div>
+
+    <header class="flex items-center justify-between p-4 bg-white/90 backdrop-blur-md sticky top-0 z-10 border-b border-gray-50">
+        <button id="open-sidebar" class="p-2 text-gray-500 hover:bg-gray-100 rounded-full transition-colors">
+            <i class="fas fa-bars"></i>
+        </button>
+        <div class="flex items-center">
+            <span class="font-bold text-2xl tracking-tighter spike-gradient-text">SPIKE</span>
+        </div>
+        <button onclick="location.reload()" class="w-9 h-9 bg-gray-100 rounded-full flex items-center justify-center text-gray-400 hover:text-purple-600 transition-colors" title="새로고침">
+            <i class="fas fa-redo-alt text-xs"></i>
+        </button>
+    </header>
+
+    <main id="chat-content" class="flex-1 overflow-y-auto chat-container px-5">
+        <div id="welcome-screen" class="welcome-screen">
+            <div class="mb-4">
+                <h1 class="text-4xl font-bold tracking-tight">
+                    <span class="typing-container spike-gradient-text">Hello, I'm SPIKE</span>
+                </h1>
+            </div>
+            <p class="text-gray-400 text-lg font-medium animate-fade" style="animation-delay: 1.5s; opacity: 0;">어떤 도움을 드릴까요?</p>
+        </div>
+        <div id="message-list" class="hidden space-y-8 pt-6 pb-12"></div>
+    </main>
+
+    <footer class="p-4 bg-white">
+        <div class="input-area flex items-center px-5 py-2 shadow-sm border border-gray-100">
+            <textarea id="user-input" rows="1" placeholder="메시지를 입력하세요" class="flex-1 bg-transparent border-none focus:ring-0 py-3 text-[16px] text-gray-800 placeholder-gray-400 resize-none max-h-40"></textarea>
+            <div class="flex items-center space-x-3 ml-2 text-gray-400">
+                <button id="send-btn" class="text-purple-600 p-2.5 rounded-full hover:bg-purple-100 transition-all">
+                    <i class="fas fa-paper-plane text-lg"></i>
+                </button>
+            </div>
+        </div>
+    </footer>
+
+    <script>
+        const apiKey = ""; 
+        const chatContent = document.getElementById('chat-content');
+        const welcomeScreen = document.getElementById('welcome-screen');
+        const messageList = document.getElementById('message-list');
+        const userInput = document.getElementById('user-input');
+        const sendBtn = document.getElementById('send-btn');
+        const sidebar = document.getElementById('sidebar');
+        const openSidebarBtn = document.getElementById('open-sidebar');
+        const closeSidebarBtn = document.getElementById('close-sidebar');
+        const sidebarOverlay = document.getElementById('sidebar-overlay');
+        const sidebarHistory = document.getElementById('sidebar-chat-history');
+        const newChatBtn = document.getElementById('new-chat-btn');
+        const clearHistoryBtn = document.getElementById('clear-history');
+
+        // 한도 관련 변수
+        const DAILY_LIMIT = 50;
+        let remainingLimit = parseInt(localStorage.getItem('spike_remaining_limit') ?? DAILY_LIMIT);
+        const userTab = document.getElementById('user-tab');
+        const limitModal = document.getElementById('limit-modal');
+        const closeModalBtn = document.getElementById('close-modal');
+        const remainingCountEl = document.getElementById('remaining-count');
+        const limitProgressEl = document.getElementById('limit-progress');
+
+        let chatHistory = [];
+        let storedHistoryTitles = JSON.parse(localStorage.getItem('spike_chat_history_titles') || "[]");
+
+        window.onload = () => {
+            renderSidebar();
+            updateLimitUI();
+        };
+
+        // 사이드바 및 모달 제어
+        openSidebarBtn.addEventListener('click', () => document.body.classList.add('sidebar-active'));
+        closeSidebarBtn.addEventListener('click', () => document.body.classList.remove('sidebar-active'));
+        sidebarOverlay.addEventListener('click', () => document.body.classList.remove('sidebar-active'));
+        userTab.addEventListener('click', () => {
+            updateLimitUI();
+            limitModal.classList.add('active');
+        });
+        closeModalBtn.addEventListener('click', () => limitModal.classList.remove('active'));
+
+        function updateLimitUI() {
+            remainingCountEl.innerText = remainingLimit;
+            const percentage = (remainingLimit / DAILY_LIMIT) * 100;
+            limitProgressEl.style.width = `${percentage}%`;
+        }
+
+        function startNewChat() {
+            messageList.innerHTML = '';
+            messageList.classList.add('hidden');
+            welcomeScreen.classList.remove('hidden');
+            chatHistory = [];
+            document.body.classList.remove('sidebar-active');
+            userInput.value = '';
+            userInput.style.height = 'auto';
+        }
+
+        newChatBtn.addEventListener('click', startNewChat);
+
+        clearHistoryBtn.addEventListener('click', () => {
+            if(confirm('모든 대화 기록을 삭제할까요?')) {
+                localStorage.removeItem('spike_chat_history_titles');
+                storedHistoryTitles = [];
+                renderSidebar();
+            }
+        });
+
+        function renderSidebar() {
+            sidebarHistory.innerHTML = '';
+            if (storedHistoryTitles.length === 0) {
+                sidebarHistory.innerHTML = '<p class="text-xs text-gray-400 px-2 italic py-4">최근 대화 기록이 없습니다.</p>';
+                return;
+            }
+            storedHistoryTitles.forEach((title) => {
+                const historyItem = document.createElement('div');
+                historyItem.className = 'p-3 text-sm text-gray-600 hover:bg-gray-50 rounded-lg cursor-pointer truncate transition-colors';
+                historyItem.innerHTML = `<i class="far fa-comment-alt mr-2 text-gray-300"></i> ${title}`;
+                historyItem.onclick = () => {
+                    startNewChat();
+                    addMessage(title, true);
+                    handleSendMessage(title);
+                };
+                sidebarHistory.appendChild(historyItem);
+            });
+        }
+
+        function saveToLocalStorage(userMessage) {
+            if (!storedHistoryTitles.includes(userMessage)) {
+                storedHistoryTitles.unshift(userMessage);
+                if (storedHistoryTitles.length > 20) storedHistoryTitles.pop();
+                localStorage.setItem('spike_chat_history_titles', JSON.stringify(storedHistoryTitles));
+                renderSidebar();
+            }
+        }
+
+        function addMessage(content, isUser = false) {
+            if (messageList.classList.contains('hidden')) {
+                welcomeScreen.classList.add('hidden');
+                messageList.classList.remove('hidden');
+            }
+
+            const wrapper = document.createElement('div');
+            wrapper.className = `flex ${isUser ? 'justify-end' : 'justify-start'} animate-fade w-full`;
+            
+            if (isUser) {
+                wrapper.innerHTML = `<div class="message-bubble user-message px-5 py-3 shadow-sm text-[15px]">${content}</div>`;
+                chatHistory.push({ role: "user", parts: [{ text: content }] });
+                if (chatHistory.filter(h => h.role === 'user').length === 1) {
+                    saveToLocalStorage(content);
+                }
+            } else {
+                wrapper.innerHTML = `
+                    <div class="flex items-start space-x-4 w-full">
+                        <div class="ai-avatar flex-shrink-0 mt-1">S</div>
+                        <div class="message-bubble ai-message py-1 text-[15px] text-gray-800 flex-1">${content.replace(/\n/g, '<br>')}</div>
+                    </div>
+                `;
+                chatHistory.push({ role: "model", parts: [{ text: content }] });
+            }
+
+            messageList.appendChild(wrapper);
+            chatContent.scrollTop = chatContent.scrollHeight;
+        }
+
+        async function fetchGeminiResponse() {
+            const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${apiKey}`;
+            try {
+                const response = await fetch(url, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        contents: chatHistory,
+                        systemInstruction: { parts: [{ text: "너는 SPIKE야. 명확하고 도움이 되는 답변을 제공해." }] }
+                    })
+                });
+                const data = await response.json();
+                return data.candidates?.[0]?.content?.parts?.[0]?.text || "답변을 가져올 수 없습니다.";
+            } catch (e) {
+                return "일시적인 오류가 발생했습니다.";
+            }
+        }
+
+        async function handleSendMessage(forcedMsg = null) {
+            if (remainingLimit <= 0) {
+                alert("오늘의 질문 한도를 모두 소진했습니다.");
+                return;
+            }
+
+            const message = forcedMsg || userInput.value.trim();
+            if (!message) return;
+
+            if (!forcedMsg) addMessage(message, true);
+            userInput.value = '';
+            userInput.style.height = 'auto';
+            
+            // 한도 차감
+            remainingLimit--;
+            localStorage.setItem('spike_remaining_limit', remainingLimit);
+            updateLimitUI();
+
+            const indicator = document.createElement('div');
+            indicator.id = 'typing-indicator';
+            indicator.className = 'flex justify-start space-x-4 animate-fade';
+            indicator.innerHTML = `<div class="ai-avatar mt-1 opacity-50">S</div><div class="flex space-x-1 items-center h-8"><div class="typing-dot"></div><div class="typing-dot"></div><div class="typing-dot"></div></div>`;
+            messageList.appendChild(indicator);
+            chatContent.scrollTop = chatContent.scrollHeight;
+
+            try {
+                const response = await fetchGeminiResponse();
+                document.getElementById('typing-indicator')?.remove();
+                addMessage(response, false);
+            } catch (error) {
+                document.getElementById('typing-indicator')?.remove();
+                addMessage("서버 연결에 실패했습니다.");
+            }
+        }
+
+        sendBtn.addEventListener('click', () => handleSendMessage());
+        userInput.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault();
+                handleSendMessage();
+            }
+        });
+        userInput.addEventListener('input', () => {
+            userInput.style.height = 'auto';
+            userInput.style.height = userInput.scrollHeight + 'px';
+        });
+    </script>
+</body>
+</html>
